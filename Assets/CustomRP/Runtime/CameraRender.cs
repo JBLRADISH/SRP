@@ -37,8 +37,13 @@ public class CameraRender : MonoBehaviour
         DrawVisibleGeometry(useDynamicBatching, useGPUInstancing);
         DrawUnsupportedShaders();
         DrawGizmos();
-        lighting.CleanUp();
+        CleanUp();
         Submit();
+    }
+
+    private void CleanUp()
+    {
+        lighting.CleanUp();
     }
 
     private void PrepareForSceneWindow()

@@ -38,13 +38,10 @@
                 float _Smoothness;
             CBUFFER_END
 
-            CBUFFER_START(CustomLight)
-                float3 LightColor;
-            CBUFFER_END
-
             CBUFFER_START(CustomShadow)
-                sampler2D _DirectionalShadowMap;
+                UNITY_DECLARE_SHADOWMAP(_DirectionalShadowMap);
                 float4x4 _DirectionalShadowMatrix;
+                float _DirectionalShadowStrength;
             CBUFFER_END
 
             v2f vert (appdata v)
@@ -57,12 +54,11 @@
                 return o;
             }
 
-            struct brdf
+            struct surface
             {
                 fixed3 worldNormal;
                 fixed3 worldLight;
                 fixed3 viewDir;
-                fixed roughness;
             };
 
             float Square(float v)
@@ -77,33 +73,40 @@
                 return range - _Metallic * range;
             }
 
-            float SpecularStrength(brdf brdf)
+            float SpecularStrength(surface surface)
             {
-                fixed3 h = normalize(brdf.worldLight + brdf.viewDir);
-                fixed nh2 = Square(saturate(dot(brdf.worldNormal, h)));
-                fixed lh2 = Square(saturate(dot(brdf.worldLight, h)));
-                float r2 = Square(brdf.roughness);
+                fixed3 h = normalize(surface.worldLight + surface.viewDir);
+                fixed nh2 = Square(saturate(dot(surface.worldNormal, h)));
+                fixed lh2 = Square(saturate(dot(surface.worldLight, h)));
+                fixed roughness = Square(1 - _Smoothness);
+                float r2 = Square(roughness);
                 float d2 = Square(nh2 * (r2 - 1.0) + 1.00001);
-                float normalization = brdf.roughness * 4.0 + 2.0;
+                float normalization = roughness * 4.0 + 2.0;
                 return r2 / (d2 * max(0.1, lh2) * normalization);
             }
 
-            fixed4 BRDF(brdf brdf)
+            fixed4 BRDF(surface surface)
             {
                 fixed4 diffuse = fixed4(_Surface.rgb, 1.0) * OneMinusReflectivity() * _Surface.a;
                 fixed4 specular = lerp(MIN_REFLECTIVITY, fixed4(_Surface.rgb, 1.0), _Metallic);
-                return specular * SpecularStrength(brdf) + diffuse;
+                return specular * SpecularStrength(surface) + diffuse;
+            }
+
+            half Shadow(v2f i)
+            {
+                float4 shadowCoord = mul(_DirectionalShadowMatrix, i.worldPos);
+                half shadow = UNITY_SAMPLE_SHADOW_PROJ(_DirectionalShadowMap, shadowCoord);
+                shadow = lerp(1.0, shadow, _DirectionalShadowStrength);
+                return shadow;
             }
 
             fixed4 frag (v2f i) : SV_Target
             {
-                brdf brdf;
-                brdf.worldNormal = normalize(i.worldNormal);
-                brdf.worldLight = normalize(_WorldSpaceLightPos0.xyz);
-                brdf.viewDir = normalize(_WorldSpaceCameraPos - i.worldPos.xyz);
-                brdf.roughness = Square(1 - _Smoothness);
-                float4 shadowCoord = mul(_DirectionalShadowMatrix, i.worldPos);
-                fixed3 color = unity_LightColor0 * saturate(dot(brdf.worldNormal, brdf.worldLight)) * BRDF(brdf);
+                surface surface;
+                surface.worldNormal = normalize(i.worldNormal);
+                surface.worldLight = normalize(_WorldSpaceLightPos0.xyz);
+                surface.viewDir = normalize(_WorldSpaceCameraPos - i.worldPos.xyz);
+                fixed3 color = unity_LightColor0 * saturate(dot(surface.worldNormal, surface.worldLight)) * Shadow(i) * BRDF(surface);
                 return fixed4(color, _Surface.a);
             }
             ENDCG

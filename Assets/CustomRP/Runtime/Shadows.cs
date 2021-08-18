@@ -31,14 +31,15 @@ public class Shadows
         buffer.Clear();
     }
 
-    private static int dirShadowMapId = Shader.PropertyToID("_DirectionalShadowMap");
+    private static int dirShadowMap = Shader.PropertyToID("_DirectionalShadowMap");
+    private static int dirShadowStrength = Shader.PropertyToID("_DirectionalShadowStrength");
     private static int dirShadowMatrix = Shader.PropertyToID("_DirectionalShadowMatrix");
 
     public void SetupDirectionalShadow()
     {
         int size = (int)settings.directional.mapSize;
-        buffer.GetTemporaryRT(dirShadowMapId, size, size, 32, FilterMode.Bilinear, RenderTextureFormat.Shadowmap);
-        buffer.SetRenderTarget(dirShadowMapId, RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store);
+        buffer.GetTemporaryRT(dirShadowMap, size, size, 32, FilterMode.Bilinear, RenderTextureFormat.Shadowmap);
+        buffer.SetRenderTarget(dirShadowMap, RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store);
         buffer.ClearRenderTarget(true, false, Color.clear);
 
         Matrix4x4 viewM, projM;
@@ -47,14 +48,25 @@ public class Shadows
         cullingResults.ComputeDirectionalShadowMatricesAndCullingPrimitives(0, 0, 1, Vector3.zero, size, 0,
             out viewM, out projM, out splitData);
         shadowSettings.splitData = splitData;
-        buffer.SetGlobalMatrix(dirShadowMatrix, projM * viewM);
         buffer.SetViewProjectionMatrices(viewM, projM);
+        if (SystemInfo.usesReversedZBuffer)
+        {
+            projM.m20 = -projM.m20;
+            projM.m21 = -projM.m21;
+            projM.m22 = -projM.m22;
+            projM.m23 = -projM.m23;
+        }
+        var scaleOffset = Matrix4x4.identity;
+        scaleOffset.m00 = scaleOffset.m11 = scaleOffset.m22 = 0.5f;
+        scaleOffset.m03 = scaleOffset.m13 = scaleOffset.m23 = 0.5f;
+        buffer.SetGlobalMatrix(dirShadowMatrix, scaleOffset * (projM * viewM));
+        buffer.SetGlobalFloat(dirShadowStrength, cullingResults.visibleLights[0].light.shadowStrength);
         ExecuteBuffer();
         context.DrawShadows(ref shadowSettings);
     }
 
     public void CleanUp()
     {
-        buffer.ReleaseTemporaryRT(dirShadowMapId);
+        buffer.ReleaseTemporaryRT(dirShadowMap);
     }
 }

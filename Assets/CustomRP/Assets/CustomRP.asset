@@ -16,6 +16,6 @@ MonoBehaviour:
   useGPUInstancing: 0
   useSRPBatcher: 1
   shadows:
-    maxDistance: 50
+    maxDistance: 15
     directional:
       mapSize: 1024
