@@ -40,7 +40,7 @@
 
             CBUFFER_START(CustomShadow)
                 UNITY_DECLARE_SHADOWMAP(_DirectionalShadowMap);
-                float4x4 _DirectionalShadowMatrix;
+                float4x4 _DirectionalShadowMatrix[4];
                 float _DirectionalShadowStrength;
             CBUFFER_END
 
@@ -94,7 +94,7 @@
 
             half Shadow(v2f i)
             {
-                float4 shadowCoord = mul(_DirectionalShadowMatrix, i.worldPos);
+                float4 shadowCoord = mul(_DirectionalShadowMatrix[3], i.worldPos);
                 half shadow = UNITY_SAMPLE_SHADOW_PROJ(_DirectionalShadowMap, shadowCoord);
                 shadow = lerp(1.0, shadow, _DirectionalShadowStrength);
                 return shadow;
