@@ -36,6 +36,12 @@ public class Shadows
     private static int dirShadowMatrix = Shader.PropertyToID("_DirectionalShadowMatrix");
     private static Matrix4x4[] dirShadowMatrixArray = new Matrix4x4[4];
 
+    private static int cascadeCountId = Shader.PropertyToID("_CascadeCount");
+    private static int cascadeCullingSpheresId = Shader.PropertyToID("_CascadeCullingSpheres");
+    private static Vector4[] cascadeCullingSpheres = new Vector4[4];
+    
+    private static int shadowDistanceFadeId = Shader.PropertyToID("_ShadowDistanceFade");
+
     private static Matrix4x4 _scaleOffset = Matrix4x4.identity;
     private static Matrix4x4 ScaleOffset
     {
@@ -52,6 +58,10 @@ public class Shadows
 
     public void SetupDirectionalShadow()
     {
+        if (!cullingResults.GetShadowCasterBounds(0, out Bounds b))
+        {
+            return;
+        }
         int size = (int) settings.directional.mapSize;
         buffer.GetTemporaryRT(dirShadowMap, size, size, 32, FilterMode.Bilinear, RenderTextureFormat.Shadowmap);
         buffer.SetRenderTarget(dirShadowMap, RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store);
@@ -65,21 +75,29 @@ public class Shadows
         for (int i = 0; i < cascadeCount; i++)
         {
             var shadowSettings = new ShadowDrawingSettings(cullingResults, 0);
-            cullingResults.ComputeDirectionalShadowMatricesAndCullingPrimitives(0, i, cascadeCount, cascadeRatios, size, 0,
-                out viewM, out projM, out splitData);
-            shadowSettings.splitData = splitData;
-            buffer.SetViewProjectionMatrices(viewM, projM);
-            if (SystemInfo.usesReversedZBuffer)
+            if (cullingResults.ComputeDirectionalShadowMatricesAndCullingPrimitives(0, i, cascadeCount, cascadeRatios, size, 0,
+                out viewM, out projM, out splitData))
             {
-                projM.m20 = -projM.m20;
-                projM.m21 = -projM.m21;
-                projM.m22 = -projM.m22;
-                projM.m23 = -projM.m23;
+                shadowSettings.splitData = splitData;
+                cascadeCullingSpheres[i] = splitData.cullingSphere;
+                cascadeCullingSpheres[i].w *= cascadeCullingSpheres[i].w;
+                buffer.SetViewProjectionMatrices(viewM, projM);
+                if (SystemInfo.usesReversedZBuffer)
+                {
+                    projM.m20 = -projM.m20;
+                    projM.m21 = -projM.m21;
+                    projM.m22 = -projM.m22;
+                    projM.m23 = -projM.m23;
+                }
+                dirShadowMatrixArray[i] = ScaleOffset * (projM * viewM);
+                ExecuteBuffer();
+                context.DrawShadows(ref shadowSettings);
             }
-            dirShadowMatrixArray[i] = ScaleOffset * (projM * viewM);
-            ExecuteBuffer();
-            context.DrawShadows(ref shadowSettings);
         }
+
+        buffer.SetGlobalVector(shadowDistanceFadeId, new Vector4(1f / settings.maxDistance, 1 / settings.distanceFade));
+        buffer.SetGlobalInt(cascadeCountId, settings.directional.cascadeCount);
+        buffer.SetGlobalVectorArray(cascadeCullingSpheresId, cascadeCullingSpheres);
         buffer.SetGlobalMatrixArray(dirShadowMatrix, dirShadowMatrixArray);
         buffer.SetGlobalFloat(dirShadowStrength, cullingResults.visibleLights[0].light.shadowStrength);
         ExecuteBuffer();

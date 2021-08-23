@@ -6,6 +6,7 @@ using UnityEngine;
 public class ShadowSettings
 {
     [Min(0f)] public float maxDistance = 100f;
+    [Range(0.001f, 1f)] public float distanceFade = 0.1f;
 
     //阴影贴图大小
     public enum TextureSize
@@ -25,18 +26,7 @@ public class ShadowSettings
         [Range(1, 4)] public int cascadeCount;
         [Range(0f, 1f)] public float cascadeRatio1, cascadeRatio2, cascadeRatio3;
 
-        private Vector3 _cascadeRatios;
-        public Vector3 CascadeRatios
-        {
-            get
-            {
-                if (_cascadeRatios == Vector3.zero)
-                {
-                    _cascadeRatios = new Vector3(cascadeRatio1, cascadeRatio2, cascadeRatio3);
-                }
-                return _cascadeRatios;
-            }
-        }
+        public Vector3 CascadeRatios => new Vector3(cascadeRatio1, cascadeRatio2, cascadeRatio3);
     }
 
     public Directional directional = new Directional
