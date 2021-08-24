@@ -39,6 +39,8 @@ public class Shadows
     private static int cascadeCountId = Shader.PropertyToID("_CascadeCount");
     private static int cascadeCullingSpheresId = Shader.PropertyToID("_CascadeCullingSpheres");
     private static Vector4[] cascadeCullingSpheres = new Vector4[4];
+    private static int cascadeDataId = Shader.PropertyToID("_CascadeData");
+    private static Vector4[] cascadeData = new Vector4[4];
     
     private static int shadowDistanceFadeId = Shader.PropertyToID("_ShadowDistanceFade");
 
@@ -81,6 +83,7 @@ public class Shadows
                 shadowSettings.splitData = splitData;
                 cascadeCullingSpheres[i] = splitData.cullingSphere;
                 cascadeCullingSpheres[i].w *= cascadeCullingSpheres[i].w;
+                cascadeData[i].x = 1f / cascadeCullingSpheres[i].w;
                 buffer.SetViewProjectionMatrices(viewM, projM);
                 if (SystemInfo.usesReversedZBuffer)
                 {
@@ -90,14 +93,18 @@ public class Shadows
                     projM.m23 = -projM.m23;
                 }
                 dirShadowMatrixArray[i] = ScaleOffset * (projM * viewM);
+                buffer.SetGlobalDepthBias(500000f, 0f);
                 ExecuteBuffer();
                 context.DrawShadows(ref shadowSettings);
+                buffer.SetGlobalDepthBias(0, 0f);
             }
         }
 
-        buffer.SetGlobalVector(shadowDistanceFadeId, new Vector4(1f / settings.maxDistance, 1 / settings.distanceFade));
+        float f = 1 - settings.directional.cascadeFade;
+        buffer.SetGlobalVector(shadowDistanceFadeId, new Vector4(1f / settings.maxDistance, 1 / settings.distanceFade, 1f / (1f - f * f)));
         buffer.SetGlobalInt(cascadeCountId, settings.directional.cascadeCount);
         buffer.SetGlobalVectorArray(cascadeCullingSpheresId, cascadeCullingSpheres);
+        buffer.SetGlobalVectorArray(cascadeDataId, cascadeData);
         buffer.SetGlobalMatrixArray(dirShadowMatrix, dirShadowMatrixArray);
         buffer.SetGlobalFloat(dirShadowStrength, cullingResults.visibleLights[0].light.shadowStrength);
         ExecuteBuffer();

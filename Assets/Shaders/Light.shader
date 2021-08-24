@@ -45,6 +45,7 @@
                 float _DirectionalShadowStrength;
                 int _CascadeCount;
                 float4 _CascadeCullingSpheres[4];
+                float4 _CascadeData[4];
                 float4 _ShadowDistanceFade;
             CBUFFER_END
 
@@ -63,6 +64,12 @@
                 fixed3 worldNormal;
                 fixed3 worldLight;
                 fixed3 viewDir;
+            };
+
+            struct shadow
+            {
+                int cascadeIndex;
+                float strength;
             };
 
             float Square(float v)
@@ -101,8 +108,15 @@
                 return specular * SpecularStrength(surface) + diffuse;
             }
 
-            int GetCascadeIndex(v2f i)
+            float FadedShadowStrength(float distance, float scale, float fade)
             {
+                return saturate((1.0 - distance * scale) * fade);
+            }
+
+            shadow GetShadowData(v2f i)
+            {
+                shadow data;
+                data.strength = _DirectionalShadowStrength * FadedShadowStrength(i.viewDepth, _ShadowDistanceFade.x, _ShadowDistanceFade.y);
                 int j;
                 for (j = 0; j < _CascadeCount; j++)
                 {
@@ -110,28 +124,31 @@
                     float distanceSqr = DistanceSquare(i.worldPos.xyz, sphere.xyz);
                     if (distanceSqr < sphere.w)
                     {
+                        if(j == _CascadeCount - 1)
+                        {
+                            data.strength *= FadedShadowStrength(distanceSqr, _CascadeData[j].x, _ShadowDistanceFade.z);
+                        }
+                        data.cascadeIndex = j;
                         break;
                     }
                 }
-                return j;
-            }
-
-            float FadedShadowStrength(float distance, float scale, float fade)
-            {
-                return saturate((1.0 - distance * scale) * fade);
+                if (j == _CascadeCount)
+                {
+                    data.strength = 0.0;
+                }
+                return data;
             }
 
             half Shadow(v2f i)
             {
-                int cascadeIndex = GetCascadeIndex(i);
-                if (cascadeIndex == _CascadeCount)
+                shadow data = GetShadowData(i);
+                if (data.strength <= 0.0)
                 {
                     return 1.0;
-                }
-                float strength = FadedShadowStrength(i.viewDepth, _ShadowDistanceFade.x, _ShadowDistanceFade.y);
-                float4 shadowCoord = mul(_DirectionalShadowMatrix[cascadeIndex], i.worldPos);
+                }               
+                float4 shadowCoord = mul(_DirectionalShadowMatrix[data.cascadeIndex], i.worldPos);
                 half shadow = UNITY_SAMPLE_SHADOW_PROJ(_DirectionalShadowMap, shadowCoord);
-                shadow = lerp(1.0, shadow, _DirectionalShadowStrength * strength);
+                shadow = lerp(1.0, shadow, data.strength);
                 return shadow;
             }
 
